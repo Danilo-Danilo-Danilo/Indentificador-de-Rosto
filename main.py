@@ -5,6 +5,7 @@ import PySimpleGUI as sg
 
 
 def get_coords(coord_rosto, j):
+    # Separa as coordenadas do rosto
     x = coord_rosto[j][0]
     y = coord_rosto[j][1]
     w = coord_rosto[j][2]
@@ -14,6 +15,7 @@ def get_coords(coord_rosto, j):
 
 
 def atualizar(img, j, coord_rosto):
+    # recebe imagem, j é o rosto selecionado, e matriz de coordenadas de rosto
     if len(coord_rosto) > 0:
         x, y, w, h = get_coords(coord_rosto, j)
         img = cv2.rectangle(img, (x, y), (x + w, y + h), (255, 0, 0), 2)
@@ -28,6 +30,7 @@ def atualizar(img, j, coord_rosto):
 
 
 def recortar_rosto(img, coord_rosto, j):
+    # Retorna os dados e a miniatura do rosto para a função selecionar
     x, y, w, h = get_coords(coord_rosto, j)
     rosto = img[y:y + h, x:x + w, :]
     resized_faces = cv2.resize(rosto, (50, 50))
@@ -36,6 +39,8 @@ def recortar_rosto(img, coord_rosto, j):
 
 
 def remover_elemento(btn, miniaturas, vb, data_rostos):
+    # Remove elemento da lista de miniaturas e dados e organiza elas
+    # E eu só descobri o pop quando tava fazendo a parte de remover da data
     if miniaturas[btn] != vb:
         miniaturas[btn] = vb
         if btn < len(data_rostos):
@@ -45,7 +50,7 @@ def remover_elemento(btn, miniaturas, vb, data_rostos):
                 miniaturas[m] = miniaturas[m + 1]
         miniaturas[9] = vb
 
-    return miniaturas
+    return miniaturas, data_rostos
 
 
 # Definindo imagens vazias para as telas no inicio
@@ -63,6 +68,7 @@ filename = None
 coord_rosto = None
 miniaturas = []
 mini = 0
+img_og = None
 for i in range(10):
     miniaturas.append(vazio_bytes)
 # Primeira coluna com espaço para a pasta e lista de arquivos
@@ -148,81 +154,130 @@ while True:
             window["-IMAGE-"].update(data=atualizar(img, j, coord_rosto))
         except:
             pass
+    # Botões de proximo e anterior
+    # Usados para selecionar o rosto na foto
     if event == "-ANT-":
-        if len(coord_rosto) > 0:
-            img = img_og.copy()
-            j -= 1
-            if j < 0:
-                j += len(coord_rosto)
-            window["-IMAGE-"].update(data=atualizar(img, j, coord_rosto))
+        if coord_rosto is not None:
+            if len(coord_rosto) > 0:
+                img = img_og.copy()
+                j -= 1
+                if j < 0:
+                    j += len(coord_rosto)
+                window["-IMAGE-"].update(data=atualizar(img, j, coord_rosto))
 
     if event == "-PROX-":
-        if len(coord_rosto) > 0:
-            img = img_og.copy()
-            j += 1
-            if j == len(coord_rosto):
-                j = 0
-            window["-IMAGE-"].update(data=atualizar(img, j, coord_rosto))
-
+        if coord_rosto is not None:
+            if len(coord_rosto) > 0:
+                img = img_og.copy()
+                j += 1
+                if j == len(coord_rosto):
+                    j = 0
+                window["-IMAGE-"].update(data=atualizar(img, j, coord_rosto))
+    # Seleciona o rosto salva ele na lista de rostos para cadastrar e mostra a miniatura dele na lista de rostos abaixo
     if event == "-SELECT-":
         repetido = True
+        # Checa se un rosto está selecionado
         if coord_rosto is not None:
             if len(coord_rosto) == 0:
                 sg.popup('Rosto não detectado.', title="Aviso")
+            # Checa se o banco está cheio
             elif mini > 9:
                 sg.popup('Banco cheio, apague um rosto ou cadastre para liberar espaço.', title="Aviso")
+            # Checa se o rosto é repetido
             elif miniaturas[mini] == vazio_bytes:
                 for rosto in miniaturas:
                     if rosto == recortar_rosto(img_og, coord_rosto, j)[0]:
                         sg.popup('Rosto já selecionado.', title="Aviso")
                         repetido = False
                 minis = str(mini)
+                # se passar por todas condições salva uma miniatura na lista e os dados do rosto na matriz data
                 if repetido:
                     miniaturas[mini] = recortar_rosto(img_og, coord_rosto, j)[0]
                     data_rostos.append(recortar_rosto(img_og, coord_rosto, j)[1])
                     window["-A_" + minis + "-"].update(image_data=miniaturas[mini])
                     mini += 1
+    # Checa se alguma das 10 miniaturas estão sendo clicadas e apaga ela se for o caso, tambem remove os dados do rosto
     for k in range(10):
         ks = str(k)
         if event == "-A_" + ks + "-":
             if miniaturas[k] != vazio_bytes:
                 mini -= 1
-                miniaturas = remover_elemento(k, miniaturas, vazio_bytes, data_rostos)
+                miniaturas, data_rostos = remover_elemento(k, miniaturas, vazio_bytes, data_rostos)
                 for i in range(k, 10):
                     st = str(i)
                     window["-A_" + st + "-"].update(image_data=miniaturas[i])
-
-
+    # Cadastra rostos selecionados no banco de dados
+    if event == "-CADASTRA-":
+        # Checa se um nome foi digitado
+        if values["-STRING-"] == "":
+            sg.popup('Digite um nome por favor.', title="Aviso")
+        # Checa se pelo menos um rosto foi selecionado
+        elif len(data_rostos) == 0:
+            sg.popup('Selecione pelo menos um rosto', title="Aviso")
+        # Se passar nas condições ele faz as transformações necessarias nas matrizes de dados
+        else:
+            for i in data_rostos:
+                data_nomes.append(values["-STRING-"])
+            rostos_cad = np.asarray(data_rostos)
+            rostos_cad = rostos_cad.reshape(len(data_rostos), -1)
+            nomes_cad = np.asarray(data_nomes)
+            nomes_cad = nomes_cad.reshape(len(data_nomes), -1)
+            # E checa se os dois arquivos existem, ele só vai realizar o cadastro em dois casos.
+            if os.path.isfile("./data/banco_rostos.csv"):
+                banco_rostos = np.genfromtxt("./data/banco_rostos.csv", delimiter=",")
+                if os.path.isfile("./data/banco_nomes.csv"):
+                    # Os dois arquivos de banco de dados existem
+                    banco_nomes = np.genfromtxt("./data/banco_nomes.csv", delimiter=",", dtype=str)
+                    banco_nomes = banco_nomes.reshape(len(banco_nomes), -1)
+                    banco_rostos = np.concatenate((banco_rostos, rostos_cad), axis=0)
+                    banco_nomes = np.concatenate((banco_nomes, nomes_cad), axis=0)
+                    np.savetxt('data/banco_rostos.csv', banco_rostos, delimiter=",")
+                    np.savetxt('data/banco_nomes.csv', banco_nomes, delimiter=",", fmt="%s")
+                    # Se já existirem ele apenas adiciona os dados aos arquivos e os salva
+                    sg.popup('Cadastro concluido, rostos adicionados ao banco de dados', title="Cadastro concluido")
+                    # E limpa as variaveis para poder realizar outros cadastros
+                    data_rostos = []
+                    data_nomes = []
+                    array_rostos = []
+                    filename = None
+                    coord_rosto = None
+                    miniaturas = []
+                    mini = 0
+                    img_og = None
+                    for i in range(10):
+                        miniaturas.append(vazio_bytes)
+                        window["-A_" + str(i) + "-"].update(image_data=miniaturas[i])
+                    window["-STRING-"].update(value="")
+                    window["-FOLDER-"].update(value="")
+                    window["-FILE LIST-"].update(values=[])
+                    window["-IMAGE-"].update(filename=r'.\data\main_empty.png')
+                    window["-TOUT-"].update(value="")
+                else:
+                    sg.popup('Banco de dados incompleto: banco_nomes.csv não encontrado', title="Erro")
+            elif os.path.isfile("./data/banco_nomes.csv"):
+                sg.popup('Banco de dados incompleto: banco_rostos.csv não encontrado', title="Erro")
+            else:
+                # Ou se nenhum dos dois existe
+                np.savetxt('data/banco_rostos.csv', rostos_cad, delimiter=",")
+                np.savetxt('data/banco_nomes.csv', nomes_cad, delimiter=",", fmt="%s")
+                sg.popup('Cadastro concluido, novo banco de dados criado', title="Cadastro concluido")
+                # Se não existirem ele cria os arquivos de um banco de dados novo
+                # E limpa as variaveis tambem
+                data_rostos = []
+                data_nomes = []
+                array_rostos = []
+                filename = None
+                coord_rosto = None
+                miniaturas = []
+                mini = 0
+                img_og = None
+                for i in range(10):
+                    miniaturas.append(vazio_bytes)
+                    window["-A_" + str(i) + "-"].update(image_data=miniaturas[i])
+                window["-STRING-"].update(value="")
+                window["-FOLDER-"].update(value="")
+                window["-FILE LIST-"].update(values=[])
+                window["-IMAGE-"].update(filename=r'.\data\main_empty.png')
+                window["-TOUT-"].update(value="")
 window.close()
 
-"""for file in os.listdir(fotos):
-    f = os.path.join(fotos, file)
-    if os.path.isfile(f):
-        img = cv2.imread(f)
-        img_cinza = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-        coord_rosto = facec.detectMultiScale(img_cinza, 1.3, 4)
-
-        for (x, y, w, h) in coord_rosto:
-            rostos = img[y:y + h, x:x + w, :]
-            resized_faces = cv2.resize(rostos, (50, 50))
-            data_rostos.append(resized_faces)
-            cv2.imshow('image', rostos)
-            cv2.threshold()
-            nome = input('Quem é essa pessoa?:')
-            data_nomes.append(nome)
-            # cv2.waitKey(0)
-            # cv2.destroyAllWindows()
-            i += 1
-
-data_rostos = np.asarray(data_rostos)
-data_rostos = data_rostos.reshape(i, -1)
-data_nomes = np.asarray(data_nomes)
-data_nomes = data_nomes.reshape(i, -1)
-print(data_nomes)
-np.savetxt('data/data_rostos.csv', data_rostos, delimiter=",")
-np.savetxt('data/data_nomes.csv', data_nomes, delimiter=",", fmt="%s")
-
-fotos = np.loadtxt('data/data_rostos.csv', delimiter= ",")
-print(fotos)
-nomes = np.loadtxt('data/data_nomes.csv', delimiter= ",", dtype= str)
-print(nomes) """
