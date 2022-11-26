@@ -160,9 +160,11 @@ while True:
         if coord_rosto is not None:
             if len(coord_rosto) > 0:
                 img = img_og.copy()
+                # j é o indice usado pra escolher o rosto dos varios na foto
                 j -= 1
                 if j < 0:
                     j += len(coord_rosto)
+                # atualiza a imagem desenhando um quadrado em volta do novo rosto selecionado
                 window["-IMAGE-"].update(data=atualizar(img, j, coord_rosto))
 
     if event == "-PROX-":
@@ -253,8 +255,10 @@ while True:
                     window["-IMAGE-"].update(filename=r'.\data\main_empty.png')
                     window["-TOUT-"].update(value="")
                 else:
+                    # Se encontra o banco_rostos mas não o banco_nomes exibe um erro e não cadastra
                     sg.popup('Banco de dados incompleto: banco_nomes.csv não encontrado', title="Erro")
             elif os.path.isfile("./data/banco_nomes.csv"):
+                # Se encontra o banco_nomes mas não o banco_rostos exibe um erro e não cadastra
                 sg.popup('Banco de dados incompleto: banco_rostos.csv não encontrado', title="Erro")
             else:
                 # Ou se nenhum dos dois existe
